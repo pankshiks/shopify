@@ -1,0 +1,100 @@
+PAID_ITEM_COUNT = 3
+DISCOUNTED_ITEM_COUNT = 1
+PAID_ITEM_COUNT_FOR_OFF = 2
+DISCOUNTED_ITEM_COUNT_FOR_OFF = 1
+
+THREE_ITEM_COPY = "Stack + Save - Buy 2 Bracelets, and get the 3rd 50% off"
+FOUR_ITEM_COPY = "Stack + Save - Buy 3 Bracelets, and get the 4th free"
+THREE_ITEM_DISCOUNT = 50
+TARGET_PRODUCT_TYPES = ["Bangle Bracelet", "Men's Box Chain Bracelet", "Men's Stretch Bracelet", "Stretch Bracelet", "Cuff Bracelet", "Slider Bracelet", "Cord Bracelet", "Stretch Bracelet", "Anklet"]
+ALLOWED_DISCOUNTS = ["REWARD POINTS", "5v26rw","JOY", "STACK"]
+enable_auto_promo = false
+is_discount_allowed = false
+Input.cart.line_items.each { |item|
+  item_properties = item.properties
+  #item_properties.merge!({"firstcall" =>'testing'})
+  #item.change_properties(item_properties, message: 'FOUR_ITEM_COPY')
+  if !item.properties.empty?
+    if item.properties["auto_promo"] == "yes"
+      enable_auto_promo = true
+    end
+  end
+}
+
+ALLOWED_DISCOUNTS.each do |discount|
+  if Input.cart.discount_code && Input.cart.discount_code.code.include?("Crystal Nesting Heart Bangle Bracelet Multiple Individual Discount")
+    is_discount_allowed = false
+    break
+  elsif Input.cart.discount_code && Input.cart.discount_code.code.include?(discount)
+    is_discount_allowed = true
+  end
+end
+
+if !Input.cart.discount_code || is_discount_allowed
+  if ((Input.cart.discount_code && Input.cart.discount_code.code.include?('STACK')) || (enable_auto_promo == true && !Input.cart.discount_code))
+    
+    filtered_line_items = Input.cart.line_items.select do |line_item|
+       #new_properties = line_item.properties
+       #new_properties.merge!({"test" =>'test'})
+       #line_item.change_properties(new_properties, message: FOUR_ITEM_COPY)
+      product = line_item.variant.product
+      TARGET_PRODUCT_TYPES.include?(product.product_type)
+    end
+    # Sort the items by price from low to high
+    sorted_items = filtered_line_items.sort_by{|line_item| line_item.line_price}
+    threshold = 4
+    total_quantity = sorted_items.map(&:quantity).reduce(0, :+)
+    remainder = total_quantity % threshold
+    free_item_count = (total_quantity - remainder) / threshold #quotient
+    
+    sorted_items.each do |line_item|
+      # new_properties = line_item.properties
+       new_properties = line_item.properties
+      # new_properties.merge!({"remainder" =>remainder})
+       line_item.change_properties(new_properties, message: FOUR_ITEM_COPY)
+      if (remainder >= 3)
+          if(line_item.quantity == 1)
+            line_item.change_line_price(line_item.line_price * (1.0 - (THREE_ITEM_DISCOUNT / 100.0)), message: THREE_ITEM_COPY)
+            remainder = 0
+            next
+          else
+            offer_item = line_item.split(take: 1)
+            position = Input.cart.line_items.find_index(line_item)
+            Input.cart.line_items.insert(position + 1, offer_item)
+            offer_item.change_line_price(offer_item.line_price * (1.0 - (THREE_ITEM_DISCOUNT / 100.0)), message: THREE_ITEM_COPY)  
+            remainder = 0
+          end
+        end
+      if (free_item_count > 0 && line_item.quantity != 0 )
+        
+        if(line_item.quantity == free_item_count)
+          line_item_properties = line_item.properties
+          line_item_properties.merge!({"stack_save_free" =>true})
+          line_item.change_properties(line_item_properties, message: FOUR_ITEM_COPY)
+          line_item.change_line_price(Money.zero, message: FOUR_ITEM_COPY)
+          break
+        elsif(line_item.quantity > free_item_count)
+          discounted_item = line_item.split(take: free_item_count)
+          position = Input.cart.line_items.find_index(line_item)
+          Input.cart.line_items.insert(position + 1, discounted_item)
+          discounted_item_properties = discounted_item.properties
+          discounted_item_properties.merge!({"stack_save_free" =>true})
+          discounted_item.change_properties(discounted_item_properties, message: FOUR_ITEM_COPY)
+          discounted_item.change_line_price(Money.zero, message: FOUR_ITEM_COPY)
+          free_item_count = 0
+          break
+        elsif (line_item.quantity < free_item_count)
+          line_item_properties = line_item.properties
+          line_item_properties.merge!({"stack_save_free" =>true})
+          line_item.change_properties(line_item_properties, message: FOUR_ITEM_COPY)
+          line_item.change_line_price(Money.zero, message: FOUR_ITEM_COPY)
+          free_item_count = free_item_count - line_item.quantity;
+          # new_properties.merge!({"_script_qty" =>line_item.quantity})
+          # new_properties.merge!({"_script_free_item_count" =>free_item_count})
+        end
+      end
+      # line_item.change_properties(new_properties, message: 'Apply free discount')
+    end
+  end
+end
+Output.cart = Input.cart
